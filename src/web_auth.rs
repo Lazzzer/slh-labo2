@@ -70,10 +70,8 @@ async fn login(
         );
     }
 
-    let user_dto = user.to_dto();
-
     // Once the user has been created, authenticate the user by adding a JWT cookie in the cookie jar
-    let jar = add_auth_cookie(jar, &user_dto).map_err(|_| {
+    let jar = add_auth_cookie(jar, &user.to_dto()).map_err(|_| {
         FailureResponse::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Could not create JWT cookie".to_string(),
@@ -366,19 +364,34 @@ async fn logout(jar: CookieJar) -> impl IntoResponse {
     (new_jar, Redirect::to("/home"))
 }
 
+/// Returns a `Result`. Can be a `CookieJar` with the auth cookie added or an error.
+///
+/// ### Arguments
+///
+/// * `jar` - A `CookieJar` to add the auth cookie to
+/// * `_user` - A `UserDTO` containing the user's email and auth method
+///
+/// ### Examples
+///
+/// ```
+/// let user_dto = UserDTO {
+///   email: "john@doe.com".to_string(),
+///   auth_method: AuthenticationMethod::OAuth
+/// };
+/// let jar = add_auth_cookie(jar, &user_dto).or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
+/// ```
 fn add_auth_cookie(jar: CookieJar, _user: &UserDTO) -> Result<CookieJar, Box<dyn Error>> {
     let claims = UserClaims {
         sub: _user.email.clone(),
         exp: (chrono::Utc::now().timestamp() + 30 * 60) as usize, // Valid for 30 minutes
         auth_method: _user.auth_method.clone(),
     };
-    // Create token encoded with the secret key
+
     let jwt = encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(env::var("JWT_SECRET").unwrap().as_ref()),
-    )
-    .unwrap();
+        &EncodingKey::from_secret(env::var("JWT_SECRET")?.as_ref()),
+    )?;
 
     Ok(jar.add(Cookie::build("auth", jwt).finish()))
 }
