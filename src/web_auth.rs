@@ -324,6 +324,14 @@ async fn password_update(
     let _old_password = _update.old_password;
     let _new_password = _update.new_password;
 
+    if _user.auth_method != AuthenticationMethod::Password {
+        return Err(FailureResponse::new(
+            StatusCode::BAD_REQUEST,
+            "Cannot change password as Oauth user".to_string(),
+        )
+        .into_response());
+    }
+
     if _old_password == _new_password {
         return Err(FailureResponse::new(
             StatusCode::BAD_REQUEST,
@@ -349,9 +357,7 @@ async fn password_update(
         );
     }
 
-    if let Err(err) = db::update_password(&mut _conn, &_user.email, &hash_password(&_new_password))
-    {
-        println!("Error: {}", err);
+    if db::update_password(&mut _conn, &_user.email, &hash_password(&_new_password)).is_err() {
         return Err(FailureResponse::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to update password".to_string(),
