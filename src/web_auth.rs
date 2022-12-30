@@ -177,6 +177,7 @@ async fn register(
 }
 
 /// Endpoint used for the verification link sent by email
+///
 /// GET /_verify-email?token=t
 async fn verify_email(
     mut _conn: DbConn,
@@ -187,20 +188,17 @@ async fn verify_email(
         &DecodingKey::from_secret(env::var("JWT_SECRET").unwrap().as_ref()),
         &Validation::new(Algorithm::HS256),
     ) {
-        Ok(token) => {
-            let email = token.claims.sub;
-            match db::set_verified(&mut _conn, &email) {
-                Ok(_) => Ok(Redirect::to("/login")),
-                Err(err) => {
-                    println!("Error: {}", err);
+        Ok(token) => match db::set_verified(&mut _conn, &token.claims.sub) {
+            Ok(value_updated) => {
+                if value_updated == 1 {
+                    Ok(Redirect::to("/login"))
+                } else {
                     Err(StatusCode::UNAUTHORIZED)
                 }
             }
-        }
-        Err(err) => {
-            println!("Error: {}", err);
-            Err(StatusCode::UNAUTHORIZED)
-        }
+            Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        },
+        Err(_) => Err(StatusCode::UNAUTHORIZED),
     }
 }
 

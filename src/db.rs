@@ -68,10 +68,12 @@ pub fn user_exists(conn: &mut DbConn, email: &str) -> Result<(), Box<dyn Error>>
 
 #[allow(dead_code)]
 /// Set the verified flag of a user in the DB
-pub fn set_verified(conn: &mut DbConn, email: &str) -> Result<(), Box<dyn Error>> {
-    diesel::update(users::table.filter(users::email.eq(email.to_string())))
-        .set(users::email_verified.eq(true))
-        .execute(&mut conn.0)
-        .and(Ok(()))
-        .map_err(|e| e.into())
+pub fn set_verified(conn: &mut DbConn, email: &str) -> QueryResult<usize> {
+    diesel::update(
+        users::table
+            .filter(users::email.eq(email.to_string()))
+            .filter(users::email_verified.eq(false)),
+    )
+    .set(users::email_verified.eq(true))
+    .execute(&mut conn.0)
 }
