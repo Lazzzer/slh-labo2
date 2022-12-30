@@ -1,4 +1,4 @@
-use crate::db::{self, user_exists, DbConn};
+use crate::db::{self, get_user, user_exists, DbConn};
 use crate::mailer::send_verification_email;
 use crate::models::{
     AppState, LoginRequest, OAuthRedirect, PasswordUpdateRequest, RegisterRequest, UserClaims,
@@ -50,7 +50,7 @@ async fn login(
     let _email = login.login_email;
     let _password = login.login_password;
 
-    let user = db::get_user(&mut _conn, &_email)
+    let user = get_user(&mut _conn, &_email)
         .map_err(|_| {
             FailureResponse::new(
                 StatusCode::UNAUTHORIZED,
@@ -244,61 +244,82 @@ async fn google_oauth(
 }
 
 /// Endpoint called after a successful OAuth login.
+///
 /// GET /_oauth?state=x&code=y
 async fn oauth_redirect(
-    mut jar: CookieJar,
+    jar: CookieJar,
     State(_session_store): State<MemoryStore>,
     mut _conn: DbConn,
     _params: Query<OAuthRedirect>,
 ) -> Result<(CookieJar, Redirect), StatusCode> {
-    // return Ok((jar, Redirect::to("/home")));
+    // Retrieve the session from the cookie
+    let cookie = jar.get("session_id");
 
-    let client = crate::oauth::OAUTH_CLIENT.clone();
+    let session_id = match cookie {
+        Some(cookie) => cookie.value().to_string(),
+        None => return Err(StatusCode::UNAUTHORIZED),
+    };
 
-    let session_id = jar.get("session_id").unwrap().value().to_string();
+    let session = match _session_store.load_session(session_id).await {
+        Ok(session) => match session {
+            Some(session) => session,
+            None => {
+                return Err(StatusCode::UNAUTHORIZED);
+            }
+        },
+        Err(_) => {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    };
 
-    let session = _session_store
-        .load_session(session_id)
-        .await
-        .unwrap()
-        .unwrap();
-
+    // Retrieve the CSRF token and PKCE verifier from the session.
     let csrf_token = CsrfToken::new(session.get("csrf_token").unwrap());
+    let pkce_verifier = PkceCodeVerifier::new(session.get("pkce_verifier").unwrap());
+
+    // Delete the session and remove the cookie as early as possible
+    _session_store.destroy_session(session).await.unwrap();
+    let jar = jar.remove(Cookie::named("session_id"));
 
     if csrf_token.secret() != _params.state.as_str() {
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    let pkce_verifier = PkceCodeVerifier::new(session.get("pkce_verifier").unwrap());
-
-    let token_result = client
+    // Exchange the authorization code for an access token.
+    let token_result = match OAUTH_CLIENT
         .exchange_code(AuthorizationCode::new(_params.code.clone()))
-        // Set the PKCE code verifier.
         .set_pkce_verifier(pkce_verifier)
         .request_async(async_http_client)
         .await
-        .unwrap();
+    {
+        Ok(token) => token,
+        Err(_) => return Err(StatusCode::UNAUTHORIZED),
+    };
 
-    _session_store.destroy_session(session).await.unwrap();
-    jar = jar.remove(Cookie::named("session_id"));
-
+    // Retrieve the user email from the access token to create a jwt token and possibly save the user
     let email = crate::oauth::get_google_oauth_email(&token_result)
         .await
         .unwrap();
 
-    if user_exists(&mut _conn, &email).is_err() {
-        // Save the user in the database
-        if let Err(err) = db::save_user(
-            &mut _conn,
-            User::new(
+    let user = get_user(&mut _conn, &email);
+
+    match user {
+        Ok(user) => {
+            // Still unauthorized because the email was used for a different auth method
+            if user.get_auth_method() != AuthenticationMethod::OAuth {
+                return Err(StatusCode::UNAUTHORIZED);
+            }
+        }
+        Err(_) => {
+            let user = User::new(
                 &email,
-                &hash_password("Yolo"),
+                &hash_password("Not_Relevant"), // TODO: Or should we just use a random password?
                 AuthenticationMethod::OAuth,
                 true,
-            ),
-        ) {
-            println!("Error: {}", err);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            );
+
+            if db::save_user(&mut _conn, user).is_err() {
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
         }
     }
 
@@ -307,11 +328,9 @@ async fn oauth_redirect(
         auth_method: AuthenticationMethod::OAuth,
     };
 
-    // If you need to recover data between requests, you may use the session_store to load a session
-    // based on a session_id.
-
-    // Once the OAuth user is authenticated, create the user in the DB and add a JWT cookie
-    let jar = add_auth_cookie(jar, &user_dto).or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
+    let jar = add_auth_cookie(jar, &user_dto)
+        .or(Err(StatusCode::INTERNAL_SERVER_ERROR))
+        .unwrap();
     Ok((jar, Redirect::to("/home")))
 }
 
@@ -352,7 +371,7 @@ async fn password_update(
         .into_response());
     }
 
-    let user = db::get_user(&mut _conn, &_user.email).unwrap();
+    let user = get_user(&mut _conn, &_user.email).unwrap();
 
     if !verify_password(&user.password, &_old_password) {
         return Err(

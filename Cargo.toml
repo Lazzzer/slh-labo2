@@ -6,10 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lettre = "0.10"
-
-jsonwebtoken = "8.2"
-
 axum = { version = "0.6" }
 axum-extra = { version = "0.4", features = ["cookie"] }
 axum-sessions = "0.4"
@@ -34,3 +30,5 @@ regex = "1.7"
 lazy_static = "1.4.0"
 rpassword = "7.2"
 argon2 = "0.4.1"
+lettre = "0.10"
+jsonwebtoken = "8.2"
