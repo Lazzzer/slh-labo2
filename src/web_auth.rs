@@ -4,6 +4,7 @@ use crate::models::{
     AppState, LoginRequest, OAuthRedirect, PasswordUpdateRequest, RegisterRequest, UserClaims,
     VerifyClaims, VerifyQueryContent,
 };
+use crate::oauth::OAUTH_CLIENT;
 use crate::user::{AuthenticationMethod, User, UserDTO};
 use crate::validator::{hash_password, validate_email_regex, validate_password, verify_password};
 use axum::extract::{Query, State};
@@ -203,32 +204,35 @@ async fn verify_email(
 }
 
 /// Endpoint used for the first OAuth step
+///
 /// GET /oauth/google
 async fn google_oauth(
     jar: CookieJar,
     State(_session_store): State<MemoryStore>,
 ) -> Result<(CookieJar, Redirect), StatusCode> {
-    let client = crate::oauth::OAUTH_CLIENT.clone();
-
+    // Generate PKCE code challenge and code verifier.
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
 
-    // Generate the full authorization URL.
-    let (auth_url, csrf_token) = client
+    // Generate the authorization URL and CSRF token.
+    let (auth_url, csrf_token) = OAUTH_CLIENT
         .authorize_url(CsrfToken::new_random)
-        // Set the desired scopes.
         .add_scope(Scope::new(
             "https://www.googleapis.com/auth/userinfo.email".to_string(),
         ))
-        // Set the PKCE code challenge.
         .set_pkce_challenge(pkce_challenge)
         .url();
 
     let mut session = Session::new();
-    session.insert("csrf_token", csrf_token.secret().clone());
-    session.insert("pkce_verifier", pkce_verifier.secret().clone());
+    session
+        .insert("csrf_token", csrf_token.secret().clone())
+        .unwrap();
+    session
+        .insert("pkce_verifier", pkce_verifier.secret().clone())
+        .unwrap();
 
-    let session_id = _session_store.store_session(session).await.unwrap(); // TODO : a lot of things to check properly
+    let session_id = _session_store.store_session(session).await.unwrap();
 
+    // Create a secure cookie with the CSRF token and PKCE verifier.
     let cookie = Cookie::build("session_id", session_id.unwrap())
         .secure(true)
         .same_site(SameSite::Lax)
@@ -369,6 +373,7 @@ async fn password_update(
 }
 
 /// Endpoint handling the logout logic
+///
 /// GET /logout
 async fn logout(jar: CookieJar) -> impl IntoResponse {
     let new_jar = jar.remove(Cookie::named("auth"));
