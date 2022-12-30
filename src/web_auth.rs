@@ -81,7 +81,6 @@ async fn login(
         .into_response());
     }
 
-    // Once the user has been created, authenticate the user by adding a JWT cookie in the cookie jar
     let jar = add_auth_cookie(jar, &user.to_dto())
         .map_err(|_| {
             FailureResponse::new(
@@ -96,18 +95,18 @@ async fn login(
 }
 
 /// Endpoint used to register a new account
+///
 /// POST /register
+///
 /// BODY { "register_email": "email", "register_password": "password", "register_password2": "password" }
 async fn register(
     mut _conn: DbConn,
-    State(_session_store): State<MemoryStore>,
     Json(register): Json<RegisterRequest>,
 ) -> Result<AuthResult, Response> {
     let _email = register.register_email;
     let _password = register.register_password;
     let _password2 = register.register_password2;
 
-    // basic validations stopping the registration going further if failed
     if _password != _password2 {
         return Err(FailureResponse::new(
             StatusCode::BAD_REQUEST,
@@ -139,17 +138,14 @@ async fn register(
         .into_response());
     }
 
-    // Save the user in the database
-    if let Err(err) = db::save_user(
-        &mut _conn,
-        User::new(
-            &_email,
-            &hash_password(&_password),
-            AuthenticationMethod::Password,
-            false,
-        ),
-    ) {
-        println!("Error: {}", err);
+    let user = User::new(
+        &_email,
+        &hash_password(&_password),
+        AuthenticationMethod::Password,
+        false,
+    );
+
+    if db::save_user(&mut _conn, user).is_err() {
         return Err(FailureResponse::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to saved user in database".to_string(),
@@ -157,30 +153,26 @@ async fn register(
         .into_response());
     }
 
-    // TODO: Refactor in its own module
-    // Create claims for the JWT token used in the verification link
     let claims = VerifyClaims {
         sub: _email.clone(),
         exp: (chrono::Utc::now().timestamp() + 10 * 60) as usize, // Valid for 10 minutes
     };
 
-    // Create token encoded with the secret key
-    let token = encode(
+    let jwt = encode(
         &Header::default(),
         &claims,
         &EncodingKey::from_secret(env::var("JWT_SECRET").unwrap().as_ref()),
     )
     .unwrap();
 
-    // Send the verification link by email
-    if let Err(err) = send_verification_email(&_email, &token) {
-        println!("Error: {}", err);
+    if send_verification_email(&_email, &jwt).is_err() {
         return Err(FailureResponse::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to send email".to_string(),
         )
         .into_response());
     }
+
     Ok(AuthResult::Success)
 }
 
