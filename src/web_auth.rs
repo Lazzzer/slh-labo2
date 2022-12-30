@@ -37,7 +37,9 @@ pub fn stage(state: AppState) -> Router {
 }
 
 /// Endpoint handling login
+///
 /// POST /login
+///
 /// BODY { "login_email": "email", "login_password": "password" }
 async fn login(
     mut _conn: DbConn,
@@ -47,20 +49,21 @@ async fn login(
     let _email = login.login_email;
     let _password = login.login_password;
 
-    let user = db::get_user(&mut _conn, &_email).map_err(|_| {
-        FailureResponse::new(
-            StatusCode::UNAUTHORIZED,
-            "Could not find user with given email".to_string(),
-        )
-        .into_response()
-    })?;
+    let user = db::get_user(&mut _conn, &_email)
+        .map_err(|_| {
+            FailureResponse::new(
+                StatusCode::UNAUTHORIZED,
+                "Could not find user with given email".to_string(),
+            )
+            .into_response()
+        })
+        .unwrap();
 
-    if !user.email_verified {
-        return Err(FailureResponse::new(
-            StatusCode::UNAUTHORIZED,
-            "Email not verified".to_string(),
-        )
-        .into_response());
+    if user.get_auth_method() != AuthenticationMethod::Password {
+        return Err(
+            FailureResponse::new(StatusCode::UNAUTHORIZED, "Bad credentials".to_string())
+                .into_response(),
+        );
     }
 
     if !verify_password(&user.password, &_password) {
@@ -70,14 +73,24 @@ async fn login(
         );
     }
 
-    // Once the user has been created, authenticate the user by adding a JWT cookie in the cookie jar
-    let jar = add_auth_cookie(jar, &user.to_dto()).map_err(|_| {
-        FailureResponse::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Could not create JWT cookie".to_string(),
+    if !user.email_verified {
+        return Err(FailureResponse::new(
+            StatusCode::UNAUTHORIZED,
+            "Email not verified".to_string(),
         )
-        .into_response()
-    })?;
+        .into_response());
+    }
+
+    // Once the user has been created, authenticate the user by adding a JWT cookie in the cookie jar
+    let jar = add_auth_cookie(jar, &user.to_dto())
+        .map_err(|_| {
+            FailureResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Could not create JWT cookie".to_string(),
+            )
+            .into_response()
+        })
+        .unwrap();
 
     Ok((jar, AuthResult::Success))
 }
