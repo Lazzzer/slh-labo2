@@ -312,7 +312,9 @@ async fn oauth_redirect(
 }
 
 /// Endpoint handling login
+///
 /// POST /password_update
+///
 /// BODY { "old_password": "pass", "new_password": "pass" }
 async fn password_update(
     mut _conn: DbConn,
@@ -396,7 +398,13 @@ fn add_auth_cookie(jar: CookieJar, _user: &UserDTO) -> Result<CookieJar, Box<dyn
         &EncodingKey::from_secret(env::var("JWT_SECRET")?.as_ref()),
     )?;
 
-    Ok(jar.add(Cookie::build("auth", jwt).finish()))
+    Ok(jar.add(
+        Cookie::build("auth", jwt)
+            .path("/")
+            .secure(true)
+            .http_only(true)
+            .finish(),
+    ))
 }
 
 enum AuthResult {
