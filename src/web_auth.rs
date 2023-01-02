@@ -444,6 +444,7 @@ impl IntoResponse for AuthResult {
     }
 }
 
+/// Wrapper to use for failed HTTP requests
 struct FailureResponse {
     status: StatusCode,
     message: String,
@@ -455,6 +456,7 @@ impl FailureResponse {
     }
 }
 
+/// Returns a status code and a JSON payload
 impl IntoResponse for FailureResponse {
     fn into_response(self) -> Response {
         (self.status, Json(json!({ "res": self.message }))).into_response()

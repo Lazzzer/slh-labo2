@@ -14,14 +14,14 @@ pub static DEFAULT_HASHED_PASSWORD: Lazy<String> = Lazy::new(|| hash_password("d
 
 /// Returns a bool. True if the email is in the right format false otherwise.
 ///
-/// # Arguments
+/// ### Arguments
 ///
-/// * `email` - A string containing the email to validate
+/// * `email` - A &str containing the email to validate
 ///
-/// # Examples
+/// ### Examples
 ///
 /// ```
-/// let accepted = email_regex_validator("toto@toto.ch");
+/// let accepted = validate_email_regex("toto@toto.ch");
 /// ```
 pub fn validate_email_regex(email: &str) -> bool {
     lazy_static! {
@@ -32,36 +32,35 @@ pub fn validate_email_regex(email: &str) -> bool {
 
 /// Returns a bool. True if the password respects the minimal score and has a length between 8 and 64 false otherwise
 ///
-/// # Arguments
+/// ### Arguments
 ///
-/// * `password` - A string containing the password to validate
-/// * `score` - The score that the password has to have at least
+/// * `password` - A &str containing the password to validate
+/// * `score` - The score that the password has to have at least (0 to 4)
 ///
-/// # Examples
+/// ### Examples
 ///
 /// ```
-/// let accepted = password_validator("richandfamous", 2);
+/// let accepted = validate_password("richandfamous", 2);
 /// ```
 pub fn validate_password(password: &str, score: u8) -> bool {
     if password.len() < 8 || password.len() > 64 {
         return false;
     }
-    // zxcvbn will return a score for the password passed in parameter
     let estimate = zxcvbn(password, &[]).unwrap().score();
     estimate >= score
 }
 
 /// Ensure that the password is equal to an argon hash. True if that is the case false otherwise
 ///
-/// # Arguments
+/// ### Arguments
 ///
-/// * `hash` - An array of u8 that is the hash of a password
+/// * `hash` - A &str that is the hash of a password
 /// * `password` - A password entered that will be compared to the hash
 ///
-/// # Examples
+/// ### Examples
 ///
 /// ```
-/// let valid = hash_validator("$argon2id$v=19$m=65536,t=2,p=1$A74CWdmhtzx5xlSniFDxOA$X3oYveivo5qGWdQmDJzQbZbZmXjE5JGpG4p5+J0x/+4".as_bytes, "TestAndFame");
+/// let valid = verify_password("$argon2id$v=19$m=65536,t=2,p=1$A74CWdmhtzx5xlSniFDxOA$X3oYveivo5qGWdQmDJzQbZbZmXjE5JGpG4p5+J0x/+4", "TestAndFame");
 /// ```
 pub fn verify_password(hash: &str, password: &str) -> bool {
     let parsed_hash = PasswordHash::new(hash).unwrap();
@@ -73,25 +72,19 @@ pub fn verify_password(hash: &str, password: &str) -> bool {
 /// Returns a String that is the value of the hashed password.
 /// The hashed function used here is argon2
 ///
-/// # Arguments
+/// ### Arguments
 ///
 /// * `password` - A string that contains the password to hash
 ///
-/// # Examples
+/// ### Examples
 ///
 /// ```
-/// let hashed_password = password_hash("MyPassword");
+/// let hashed_password = hash_password("my_password");
 /// ```
 pub fn hash_password(password: &str) -> String {
     let salt = SaltString::generate(&mut OsRng);
-
-    // Argon2 with default params (Argon2id v19)
-    let argon2 = Argon2::default();
-
-    let password_hash = argon2
+    Argon2::default()
         .hash_password(password.as_bytes(), &salt)
         .unwrap()
-        .to_string();
-
-    password_hash
+        .to_string()
 }
