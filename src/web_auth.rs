@@ -1,10 +1,10 @@
-use crate::db::{self, get_user, user_exists, DbConn};
+use crate::db::{get_user, save_user, set_verified, update_password, user_exists, DbConn};
 use crate::jwt::{decode_jwt, encode_jwt, UserClaims, VerifyClaims, VerifyQueryContent};
 use crate::mailer::send_verification_email;
 use crate::models::{
     AppState, LoginRequest, OAuthRedirect, PasswordUpdateRequest, RegisterRequest,
 };
-use crate::oauth::OAUTH_CLIENT;
+use crate::oauth::{get_google_oauth_email, OAUTH_CLIENT};
 use crate::user::{AuthenticationMethod, User, UserDTO};
 use crate::validator::{
     hash_password, validate_email_regex, validate_password, verify_password,
@@ -152,7 +152,7 @@ async fn register(
         false,
     );
 
-    if db::save_user(&mut _conn, user).is_err() {
+    if save_user(&mut _conn, user).is_err() {
         return Err(FailureResponse::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to saved user in database".to_string(),
@@ -186,7 +186,7 @@ async fn verify_email(
     _params: Query<VerifyQueryContent>,
 ) -> Result<Redirect, StatusCode> {
     match decode_jwt::<VerifyClaims>(&_params.token) {
-        Ok(token) => match db::set_verified(&mut _conn, &token.claims.sub) {
+        Ok(token) => match set_verified(&mut _conn, &token.claims.sub) {
             Ok(value_updated) => {
                 if value_updated == 1 {
                     Ok(Redirect::to("/login"))
@@ -293,19 +293,18 @@ async fn oauth_redirect(
     };
 
     // Retrieve the user email from the access token to create a jwt token and possibly save the user
-    let email = crate::oauth::get_google_oauth_email(&token_result)
-        .await
-        .unwrap();
+    let email = get_google_oauth_email(&token_result).await.unwrap();
 
     let user = get_user(&mut _conn, &email);
 
     match user {
         Ok(user) => {
-            // Still unauthorized because the email was used for a different auth method
+            // Still need to check if the user has the right authentication method
             if user.get_auth_method() != AuthenticationMethod::OAuth {
                 return Err(StatusCode::UNAUTHORIZED);
             }
         }
+        // If the user doesn't exist, save it
         Err(_) => {
             let user = User::new(
                 &email,
@@ -314,7 +313,7 @@ async fn oauth_redirect(
                 true,
             );
 
-            if db::save_user(&mut _conn, user).is_err() {
+            if save_user(&mut _conn, user).is_err() {
                 return Err(StatusCode::INTERNAL_SERVER_ERROR);
             }
         }
@@ -363,7 +362,7 @@ async fn password_update(
     if !validate_password(&_new_password, 4) {
         return Err(FailureResponse::new(
             StatusCode::BAD_REQUEST,
-            "Password is not strong enough".to_string(),
+            "New password is not strong enough".to_string(),
         )
         .into_response());
     }
@@ -377,7 +376,7 @@ async fn password_update(
         );
     }
 
-    if db::update_password(&mut _conn, &_user.email, &hash_password(&_new_password)).is_err() {
+    if update_password(&mut _conn, &_user.email, &hash_password(&_new_password)).is_err() {
         return Err(FailureResponse::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to update password".to_string(),
@@ -396,7 +395,8 @@ async fn logout(jar: CookieJar) -> impl IntoResponse {
     (new_jar, Redirect::to("/home"))
 }
 
-/// Returns a `Result`. Can be a `CookieJar` with the auth cookie added or an error.
+/// Returns a `Result`. Can be a `CookieJar` with the auth cookie added or an error. The auth cookie contains a JWT token
+/// valid for 30 minutes.
 ///
 /// ### Arguments
 ///
