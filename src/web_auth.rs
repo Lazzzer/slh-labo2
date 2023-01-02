@@ -6,7 +6,10 @@ use crate::models::{
 };
 use crate::oauth::OAUTH_CLIENT;
 use crate::user::{AuthenticationMethod, User, UserDTO};
-use crate::validator::{hash_password, validate_email_regex, validate_password, verify_password};
+use crate::validator::{
+    hash_password, validate_email_regex, validate_password, verify_password,
+    DEFAULT_HASHED_PASSWORD,
+};
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
@@ -50,24 +53,26 @@ async fn login(
     let _email = login.login_email;
     let _password = login.login_password;
 
-    let user = get_user(&mut _conn, &_email)
-        .map_err(|_| {
-            FailureResponse::new(
-                StatusCode::UNAUTHORIZED,
-                "Could not find user with given email".to_string(),
-            )
-            .into_response()
-        })
-        .unwrap();
+    let mut user = User::new(
+        "default_mail@default_domain.com",
+        DEFAULT_HASHED_PASSWORD.as_str(),
+        AuthenticationMethod::Password,
+        false,
+    );
+    let mut password_user_exist = false;
 
-    if user.get_auth_method() != AuthenticationMethod::Password {
+    if let Ok(u) = get_user(&mut _conn, &_email) {
+        password_user_exist = u.get_auth_method() == AuthenticationMethod::Password;
+        user = u;
+    };
+
+    if !password_user_exist {
+        verify_password(&user.password, "wasting time");
         return Err(
             FailureResponse::new(StatusCode::UNAUTHORIZED, "Bad credentials".to_string())
                 .into_response(),
         );
-    }
-
-    if !verify_password(&user.password, &_password) {
+    } else if !verify_password(&user.password, &_password) {
         return Err(
             FailureResponse::new(StatusCode::UNAUTHORIZED, "Bad credentials".to_string())
                 .into_response(),

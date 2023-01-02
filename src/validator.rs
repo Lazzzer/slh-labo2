@@ -3,8 +3,14 @@ use argon2::{
     Argon2,
 };
 use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use zxcvbn::zxcvbn;
+
+/// Default hashed password to use when :
+/// - An standard authentication fails. It will be passed in `verify_password()` to avoid timing attacks.
+/// - A user signed up with oauth. It will fill the password field in the database.
+pub static DEFAULT_HASHED_PASSWORD: Lazy<String> = Lazy::new(|| hash_password("default_password"));
 
 /// Returns a bool. True if the email is in the right format false otherwise.
 ///
