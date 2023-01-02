@@ -1,10 +1,9 @@
-use std::env;
-
 use oauth2::basic::{BasicClient, BasicTokenResponse};
 use oauth2::{AuthUrl, ClientId, ClientSecret, RedirectUrl, TokenResponse, TokenUrl};
 use once_cell::sync::Lazy;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+use std::env;
 
 #[allow(dead_code)]
 /// Lazy is used to initialize a complex static variable as it is currently not supported in native Rust.

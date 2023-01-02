@@ -1,7 +1,5 @@
-use std::env;
-
 use crate::db::Pool;
-use crate::models::UserClaims;
+use crate::jwt::{decode_jwt, UserClaims};
 use crate::user::UserDTO;
 use axum::async_trait;
 use axum::extract::{FromRef, FromRequestParts};
@@ -9,7 +7,6 @@ use axum::http::request::Parts;
 use axum::response::Redirect;
 use axum::RequestPartsExt;
 use axum_extra::extract::CookieJar;
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
 const REDIRECT_URL: &str = "/home";
 
@@ -32,11 +29,7 @@ where
             .ok_or_else(|| Redirect::to(REDIRECT_URL))?
             .value();
 
-        if let Ok(token) = decode::<UserClaims>(
-            _jwt,
-            &DecodingKey::from_secret(env::var("JWT_SECRET").unwrap().as_ref()),
-            &Validation::new(Algorithm::HS256),
-        ) {
+        if let Ok(token) = decode_jwt::<UserClaims>(_jwt) {
             return Ok(UserDTO {
                 email: token.claims.sub,
                 auth_method: token.claims.auth_method,

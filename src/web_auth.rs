@@ -1,8 +1,8 @@
 use crate::db::{self, get_user, user_exists, DbConn};
+use crate::jwt::{decode_jwt, encode_jwt, UserClaims, VerifyClaims, VerifyQueryContent};
 use crate::mailer::send_verification_email;
 use crate::models::{
-    AppState, LoginRequest, OAuthRedirect, PasswordUpdateRequest, RegisterRequest, UserClaims,
-    VerifyClaims, VerifyQueryContent,
+    AppState, LoginRequest, OAuthRedirect, PasswordUpdateRequest, RegisterRequest,
 };
 use crate::oauth::OAUTH_CLIENT;
 use crate::user::{AuthenticationMethod, User, UserDTO};
@@ -19,11 +19,9 @@ use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
 use axum_sessions::async_session::{chrono, MemoryStore, Session, SessionStore};
 use axum_sessions::SameSite;
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use oauth2::reqwest::async_http_client;
 use oauth2::{AuthorizationCode, CsrfToken, PkceCodeChallenge, PkceCodeVerifier, Scope};
 use serde_json::json;
-use std::env;
 use std::error::Error;
 
 /// Declares the different endpoints
@@ -61,6 +59,7 @@ async fn login(
     );
     let mut password_user_exist = false;
 
+    // Basically, we can proceed only if the user exists and use password authentication
     if let Ok(u) = get_user(&mut _conn, &_email) {
         password_user_exist = u.get_auth_method() == AuthenticationMethod::Password;
         user = u;
@@ -113,6 +112,7 @@ async fn register(
     let _password = register.register_password;
     let _password2 = register.register_password2;
 
+    // First, we check the inputs with basic validations and verify that the user does not already exist
     if _password != _password2 {
         return Err(FailureResponse::new(
             StatusCode::BAD_REQUEST,
@@ -144,6 +144,7 @@ async fn register(
         .into_response());
     }
 
+    // Then, we save the user in the database and send a verification email with a JWT valid for 10 minutes
     let user = User::new(
         &_email,
         &hash_password(&_password),
@@ -164,12 +165,7 @@ async fn register(
         exp: (chrono::Utc::now().timestamp() + 10 * 60) as usize, // Valid for 10 minutes
     };
 
-    let jwt = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(env::var("JWT_SECRET").unwrap().as_ref()),
-    )
-    .unwrap();
+    let jwt = encode_jwt(&claims);
 
     if send_verification_email(&_email, &jwt).is_err() {
         return Err(FailureResponse::new(
@@ -189,11 +185,7 @@ async fn verify_email(
     mut _conn: DbConn,
     _params: Query<VerifyQueryContent>,
 ) -> Result<Redirect, StatusCode> {
-    match decode::<VerifyClaims>(
-        &_params.token,
-        &DecodingKey::from_secret(env::var("JWT_SECRET").unwrap().as_ref()),
-        &Validation::new(Algorithm::HS256),
-    ) {
+    match decode_jwt::<VerifyClaims>(&_params.token) {
         Ok(token) => match db::set_verified(&mut _conn, &token.claims.sub) {
             Ok(value_updated) => {
                 if value_updated == 1 {
@@ -427,12 +419,7 @@ fn add_auth_cookie(jar: CookieJar, _user: &UserDTO) -> Result<CookieJar, Box<dyn
         auth_method: _user.auth_method.clone(),
     };
 
-    let jwt = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(env::var("JWT_SECRET")?.as_ref()),
-    )?;
-
+    let jwt = encode_jwt(&claims);
     Ok(jar.add(
         Cookie::build("auth", jwt)
             .path("/")

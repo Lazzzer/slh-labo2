@@ -12,6 +12,7 @@ use std::net::SocketAddr;
 
 mod auth;
 mod db;
+mod jwt;
 mod mailer;
 mod models;
 mod oauth;

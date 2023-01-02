@@ -1,10 +1,9 @@
-use std::env;
-
 use lettre::{
     message::MultiPart,
     transport::smtp::{authentication::Credentials, response::Response, Error},
     Message, SmtpTransport, Transport,
 };
+use std::env;
 
 pub fn send_verification_email(email: &str, jwt_token: &str) -> Result<Response, Error> {
     let credentials = Credentials::new(
