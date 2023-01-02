@@ -55,7 +55,7 @@ async fn login(
 
     let mut user = User::new(
         "default_mail@default_domain.com",
-        DEFAULT_HASHED_PASSWORD.as_str(),
+        &DEFAULT_HASHED_PASSWORD,
         AuthenticationMethod::Password,
         false,
     );
@@ -317,7 +317,7 @@ async fn oauth_redirect(
         Err(_) => {
             let user = User::new(
                 &email,
-                &hash_password("Not_Relevant"), // TODO: Or should we just use a random password?
+                &DEFAULT_HASHED_PASSWORD,
                 AuthenticationMethod::OAuth,
                 true,
             );
