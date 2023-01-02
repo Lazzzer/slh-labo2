@@ -5,7 +5,6 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::env;
 
-#[allow(dead_code)]
 /// Lazy is used to initialize a complex static variable as it is currently not supported in native Rust.
 /// The initialization is done only once when the variable is used for the first time.  
 pub static OAUTH_CLIENT: Lazy<BasicClient> = Lazy::new(|| {
@@ -28,7 +27,6 @@ pub static OAUTH_CLIENT: Lazy<BasicClient> = Lazy::new(|| {
     )
 });
 
-#[allow(dead_code)]
 static REQW_CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
 
 /// Structure returned by Google API when requesting the email address
@@ -40,7 +38,6 @@ struct UserInfoEmail {
     picture: String,
 }
 
-#[allow(dead_code)]
 /// Returns the email address associated with the token
 pub async fn get_google_oauth_email(token: &BasicTokenResponse) -> Result<String, StatusCode> {
     REQW_CLIENT

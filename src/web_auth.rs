@@ -1,8 +1,9 @@
 use crate::db::{get_user, save_user, set_verified, update_password, user_exists, DbConn};
-use crate::jwt::{decode_jwt, encode_jwt, UserClaims, VerifyClaims, VerifyQueryContent};
+use crate::jwt::{decode_jwt, encode_jwt, UserClaims, VerifyClaims};
 use crate::mailer::send_verification_email;
 use crate::models::{
     AppState, LoginRequest, OAuthRedirect, PasswordUpdateRequest, RegisterRequest,
+    VerifyQueryContent,
 };
 use crate::oauth::{get_google_oauth_email, OAUTH_CLIENT};
 use crate::user::{AuthenticationMethod, User, UserDTO};

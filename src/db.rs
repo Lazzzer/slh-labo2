@@ -27,7 +27,6 @@ where
     }
 }
 
-#[allow(dead_code)]
 /// Get the user with the corresponding email from the DB.
 pub fn get_user(conn: &mut DbConn, email: &str) -> Result<User, Box<dyn Error>> {
     users::table
@@ -36,7 +35,6 @@ pub fn get_user(conn: &mut DbConn, email: &str) -> Result<User, Box<dyn Error>> 
         .map_err(|e| e.into())
 }
 
-#[allow(dead_code)]
 /// Save a user inside the DB
 pub fn save_user(conn: &mut DbConn, user: User) -> Result<(), Box<dyn Error>> {
     diesel::insert_into(users::table)
@@ -46,7 +44,6 @@ pub fn save_user(conn: &mut DbConn, user: User) -> Result<(), Box<dyn Error>> {
         .map_err(|e| e.into())
 }
 
-#[allow(dead_code)]
 /// Update the password of a user in the DB
 pub fn update_password(
     conn: &mut DbConn,
@@ -60,13 +57,11 @@ pub fn update_password(
         .map_err(|e| e.into())
 }
 
-#[allow(dead_code)]
 /// Checks whether a user with that email exists in the DB. Returns Ok(()) if the user exists.
 pub fn user_exists(conn: &mut DbConn, email: &str) -> Result<(), Box<dyn Error>> {
     get_user(conn, email).and(Ok(()))
 }
 
-#[allow(dead_code)]
 /// Set the verified flag of a user in the DB
 pub fn set_verified(conn: &mut DbConn, email: &str) -> QueryResult<usize> {
     diesel::update(

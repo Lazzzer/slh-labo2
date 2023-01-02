@@ -56,3 +56,9 @@ pub struct OAuthRedirect {
     pub state: String,
     pub code: String,
 }
+
+/// Used to extract the token from the query string in the verify-email endpoint
+#[derive(Deserialize)]
+pub struct VerifyQueryContent {
+    pub token: String,
+}

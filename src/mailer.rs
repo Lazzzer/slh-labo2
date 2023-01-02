@@ -5,6 +5,8 @@ use lettre::{
 };
 use std::env;
 
+/// Sends an email to the given address with a message containing a link.
+/// The link contains a JWT token that can be used to verify the email address.
 pub fn send_verification_email(email: &str, jwt_token: &str) -> Result<Response, Error> {
     let credentials = Credentials::new(
         env::var("SMTP_USERNAME").unwrap(),
