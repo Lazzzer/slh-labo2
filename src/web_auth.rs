@@ -49,7 +49,7 @@ async fn login(
     jar: CookieJar,
     Json(login): Json<LoginRequest>,
 ) -> Result<(CookieJar, AuthResult), Response> {
-    let _email = login.login_email;
+    let _email = login.login_email.to_lowercase();
     let _password = login.login_password;
 
     let mut user = User::new(
@@ -109,7 +109,7 @@ async fn register(
     mut _conn: DbConn,
     Json(register): Json<RegisterRequest>,
 ) -> Result<AuthResult, Response> {
-    let _email = register.register_email;
+    let _email = register.register_email.to_lowercase();
     let _password = register.register_password;
     let _password2 = register.register_password2;
 
